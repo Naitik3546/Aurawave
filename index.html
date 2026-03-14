@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AuraWave — Music With You, Everywhere</title>
@@ -636,6 +639,7 @@ input:focus { animation: borderColorCycle 4s linear infinite; }
   .sticky-label { display: none; }
 }
 </style>
+
 </head>
 <body>
 
@@ -892,10 +896,6 @@ function switchTab(tab) {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 </script>
 
-<!-- Firebase Compat SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- Firebase SDK -->
 <script>
 // Firebase loaded via compat CDN (see script tags below)
@@ -915,11 +915,14 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const provider = new firebase.auth.GoogleAuthProvider();
 
-// Check if already logged in → redirect to dashboard
-auth.onAuthStateChanged(user => {
-  if (user) {
-    window.location.replace('dashboard.html');
-  }
+// Set persistence to LOCAL so auth survives page reloads
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(() => {
+  // Check if already logged in → redirect to dashboard
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      window.location.replace('dashboard.html');
+    }
+  });
 });
 
 // Show error
