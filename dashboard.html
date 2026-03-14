@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AuraWave</title>
@@ -204,6 +207,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes mainPan{0%{transform:scale(1.05) translate3d(-24px,-16px,0);}50%{transform:scale(1.12) translate3d(18px,6px,0);}100%{transform:scale(1.08) translate3d(0,22px,0);}}
 </style>
+
 </head>
 <body>
 
@@ -651,9 +655,7 @@ updateLikedUI();loadTrending();
 </script>
 
 <!-- Firebase Compat SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
 <script>
 firebase.initializeApp({
   apiKey:"AIzaSyCc63G6x6bZaF8ZZMEi3hWfZjVjASImjEI",
@@ -668,10 +670,18 @@ const _db=firebase.firestore();
 window._fbAuth=_auth;
 window._fbDb=_db;
 
-// Hide page until auth confirmed
+// Hide page until auth confirmed — add small delay to let Firebase restore session
 document.body.style.visibility='hidden';
 
+let _authResolved = false;
+// Safety timeout — if Firebase takes too long, redirect to login
+const _authTimeout = setTimeout(()=>{
+  if(!_authResolved) window.location.replace('index.html');
+}, 5000);
+
 _auth.onAuthStateChanged(async(user)=>{
+  _authResolved = true;
+  clearTimeout(_authTimeout);
   if(!user){window.location.replace('index.html');return;}
   window._fbUser=user;
   document.body.style.visibility='visible';
@@ -679,7 +689,7 @@ _auth.onAuthStateChanged(async(user)=>{
   // Update UI
   const name=user.displayName||user.email.split('@')[0];
   document.getElementById('userName').textContent=name;
-  document.getElementById('dropdownName').textContent=name+' ';
+  document.getElementById('dropdownName').textContent=name+' 🎧';
   document.getElementById('madeForName').textContent=name;
   const avatarEl=document.getElementById('userAvatar');
   if(user.photoURL){avatarEl.innerHTML=`<img src="${user.photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;}
