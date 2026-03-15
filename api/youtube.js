@@ -6,82 +6,84 @@ export default async function handler(req, res) {
 
   const { action, q, id } = req.query;
 
-  // Updated working Invidious instances (2025)
-  const instances = [
-    'https://inv.nadeko.net',
-    'https://inv1.nadeko.net',
-    'https://inv2.nadeko.net',
-    'https://inv3.nadeko.net',
-    'https://yewtu.be',
-    'https://invidious.nerdvpn.de',
+  // Piped API instances (different from Invidious)
+  const pipedInstances = [
+    'https://pipedapi.kavin.rocks',
+    'https://pipedapi.adminforge.de',
+    'https://pipedapi.coldforge.xyz',
+    'https://pipedapi.drgns.space',
+    'https://api.piped.yt',
   ];
 
   // ── SEARCH ──
   if (action === 'search') {
     if (!q) return res.status(400).json({ error: 'No query' });
-    for (const base of instances) {
+
+    for (const base of pipedInstances) {
       try {
-        const url = `${base}/api/v1/search?q=${encodeURIComponent(q)}&type=video&fields=videoId,title,author,lengthSeconds,videoThumbnails&pretty=1`;
+        const url = `${base}/search?q=${encodeURIComponent(q)}&filter=videos`;
         const r = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0' },
-          signal: AbortSignal.timeout(6000)
+          headers: {
+            'User-Agent': 'Mozilla/5.0',
+            'Accept': 'application/json',
+          },
+          signal: AbortSignal.timeout(7000)
         });
         if (!r.ok) continue;
         const data = await r.json();
-        if (!Array.isArray(data) || !data.length) continue;
+        const items = data.items || data.results || [];
+        if (!items.length) continue;
 
-        // Filter out karaoke, nightcore, covers, instrumentals
-        const junk = /karaoke|nightcore|instrumental|cover|remix|sped up|lofi|lo-fi|reverb|slowed/i;
-        const results = data
-          .filter(v => v.videoId && v.title && !junk.test(v.title))
+        const junk = /karaoke|nightcore|instrumental|cover|sped up|lofi|lo-fi|reverb|slowed/i;
+        const results = items
+          .filter(v => v.url && v.title && !junk.test(v.title))
           .slice(0, 10)
           .map(v => ({
-            id: v.videoId,
+            id: v.url.replace('/watch?v=', ''),
             title: v.title,
-            artist: v.author,
-            thumbnail: `https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`,
-            duration: v.lengthSeconds,
+            artist: v.uploaderName || v.author || '',
+            thumbnail: v.thumbnail || `https://i.ytimg.com/vi/${v.url.replace('/watch?v=','')}/mqdefault.jpg`,
+            duration: v.duration,
           }));
 
         if (!results.length) continue;
         return res.status(200).json({ results, source: base });
       } catch { continue; }
     }
-    return res.status(500).json({ error: 'Search failed on all instances', results: [] });
+    return res.status(500).json({ error: 'Search failed', results: [] });
   }
 
   // ── GET AUDIO URL ──
   if (action === 'audio') {
     if (!id) return res.status(400).json({ error: 'No video ID' });
-    for (const base of instances) {
+
+    for (const base of pipedInstances) {
       try {
-        const url = `${base}/api/v1/videos/${id}?fields=adaptiveFormats,formatStreams`;
+        const url = `${base}/streams/${id}`;
         const r = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0' },
+          headers: {
+            'User-Agent': 'Mozilla/5.0',
+            'Accept': 'application/json',
+          },
           signal: AbortSignal.timeout(8000)
         });
         if (!r.ok) continue;
         const data = await r.json();
         if (!data || data.error) continue;
 
-        // Try adaptive audio formats first (audio only, better quality)
-        const adaptive = (data.adaptiveFormats || [])
-          .filter(f => f.type && f.type.startsWith('audio/') && f.url)
-          .sort((a, b) => (parseInt(b.bitrate) || 0) - (parseInt(a.bitrate) || 0));
+        // Get best audio stream
+        const audioStreams = (data.audioStreams || [])
+          .filter(s => s.url)
+          .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
 
-        // Fallback to combined format streams
-        const streams = (data.formatStreams || [])
-          .filter(f => f.url)
-          .sort((a, b) => (parseInt(b.bitrate) || 0) - (parseInt(a.bitrate) || 0));
-
-        const audioUrl = adaptive[0]?.url || streams[0]?.url;
+        const audioUrl = audioStreams[0]?.url;
         if (!audioUrl) continue;
 
         return res.status(200).json({ audioUrl, source: base });
       } catch { continue; }
     }
-    return res.status(500).json({ error: 'Could not get audio from any instance' });
+    return res.status(500).json({ error: 'Could not get audio' });
   }
 
-  res.status(400).json({ error: 'Invalid action. Use action=search or action=audio' });
+  res.status(400).json({ error: 'Invalid action' });
 }
