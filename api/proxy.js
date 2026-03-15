@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   if (!path) return res.status(400).json({ error: 'No path provided' });
 
   try {
-    const url = `https://jiosaavn-api-sigma-sandy.vercel.app/api${path}`;
+    const url = `https://jiosaavn-api-sigma-sandy.vercel.app${path}`;
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' }
     });
@@ -19,3 +19,10 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message });
   }
 }
+```
+
+**Note:** `/api` hata diya URL se — direct `/search/songs` jaayega! 🔥
+
+Phir browser mein test karo:
+```
+https://aurawave-flame.vercel.app/api/proxy?path=/api/search/songs?query=bairan&limit=1&page=1
