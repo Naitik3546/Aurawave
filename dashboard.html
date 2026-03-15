@@ -517,11 +517,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 </nav>
 
 <script>
-const SAAVN='https://jiosaavn-api-sigma-sandy.vercel.app/api';
-const CORS_PROXY='https://corsproxy.io/?';
-function saavnFetch(path){
-  return fetch(CORS_PROXY+encodeURIComponent(SAAVN+path))
+const ITUNES='https://itunes.apple.com/search';
+function itunesFetch(q, limit=20){
+  return fetch(`${ITUNES}?term=${encodeURIComponent(q)}&media=music&entity=song&limit=${limit}`)
     .then(r=>r.json());
+}
+function normalizeItunes(s,i){
+  const art=(s.artworkUrl100||s.artworkUrl60||'').replace('100x100','300x300');
+  return{id:s.trackId||i,title:s.trackName||'Unknown',name:s.trackName||'Unknown',
+    artist:s.artistName||'—',channelTitle:s.artistName||'—',
+    thumbnail:art,image:art,previewUrl:s.previewUrl||''};
 }
 const audio=document.getElementById('audioEl');
 let queue=[],currentIdx=-1,isPlaying=false,isLooping=false,searchTimer=null;
@@ -540,7 +545,7 @@ async function loadTrending(){
   const q=queries[Math.floor(Math.random()*queries.length)];
   try{
     const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=20&page=1`);
-    queue=((d.data&&d.data.results)||[]).slice(0,20).map((s,i)=>normalizeSaavnTrack(s,i));
+    queue=((d.data&&d.data.results)||[]).slice(0,20).map((s,i)=>normalizeItunes(s,i));
     document.getElementById('songCount').textContent=queue.length+' songs';
     renderGrid(queue,'songsGrid');
     loadMadeFor();
@@ -549,10 +554,10 @@ async function loadTrending(){
 
 async function loadMadeFor(){
   try{
-    const q2=['old hindi classics','kishore kumar','lata mangeshkar'];
+    const q2=['lofi chill beats','classic rock hits','jazz piano'];
     const q=q2[Math.floor(Math.random()*q2.length)];
-    const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
-    const songs=((d.data&&d.data.results)||[]).slice(0,8).map((s,i)=>normalizeSaavnTrack(s,i));
+    const d=await itunesFetch(q,8);
+    const songs=(d.results||[]).slice(0,8).map((s,i)=>normalizeItunes(s,i));
     if(songs.length){madeForQueue=songs;document.getElementById('madeForSection').style.display='';renderGrid(songs,'madeForGrid',true);}
   }catch{}
 }
@@ -734,8 +739,8 @@ document.addEventListener('click',e=>{
 async function doSearch(q){
   const dd=document.getElementById('searchDropdown');
   try{
-    const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
-    const songs=((d.data&&d.data.results)||[]).slice(0,8).map((s,i)=>normalizeSaavnTrack(s,i));
+    const d=await itunesFetch(q,8);
+    const songs=(d.results||[]).slice(0,8).map((s,i)=>normalizeItunes(s,i));
     window._sr=songs;
     if(!songs.length){dd.innerHTML='<div class="search-loading">No results</div>';return;}
     dd.innerHTML=songs.map((s,i)=>{
@@ -861,8 +866,19 @@ _auth.onAuthStateChanged(async(user)=>{
     }
   } catch(e) { console.warn('Firestore error', e); }
 
-  // Final fallback — never show email
-  if(!name || name.includes('@')) name = user.email.split('@')[0];
+  // If name looks like email or is empty, try to get a proper name
+  if(!name || name.includes('@') || name === user.email.split('@')[0]) {
+    // Try Firebase Auth displayName (set during Google login)
+    if(user.displayName) {
+      name = user.displayName;
+      // Save proper name back to Firestore
+      try { await _db.collection('users').doc(user.uid).update({ name: name }); } catch {}
+    } else {
+      // Clean up email-based name - capitalize first letter
+      name = user.email.split('@')[0];
+      name = name.charAt(0).toUpperCase() + name.slice(1);
+    }
+  }
 
   // Update all UI elements with name
   document.getElementById('userName').textContent = name;
