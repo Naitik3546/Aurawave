@@ -377,24 +377,26 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 <audio id="audioEl"></audio>
 
 <script>
-const ITUNES_SEARCH_BASE='https://itunes.apple.com/search';
+const SAAVN='https://jiosaavn-api-sigma-sandy.vercel.app/api';
 const audio=document.getElementById('audioEl');
 let queue=[],currentIdx=-1,isPlaying=false,isLooping=false,searchTimer=null;
 let currentSong=null,madeForQueue=[],activePlaylist='trending';
 let likedSongs=JSON.parse(localStorage.getItem('aw_liked')||'[]');
 
-function normalizeITunesTrack(s,i=0){
-  const art=(s.artworkUrl100||s.artworkUrl60||'').replace('100x100','300x300');
-  return{id:s.trackId??s.collectionId??i,title:s.trackName||'Unknown',name:s.trackName||'Unknown',artist:s.artistName||'—',channelTitle:s.artistName||'—',thumbnail:art,image:art,previewUrl:s.previewUrl||''};
+function normalizeSaavnTrack(s,i=0){
+  const art=(s.image&&s.image[2]&&s.image[2].url)||(s.image&&s.image[1]&&s.image[1].url)||(s.image&&s.image[0]&&s.image[0].url)||'';
+  const streamUrl=(s.downloadUrl&&s.downloadUrl[4]&&s.downloadUrl[4].url)||(s.downloadUrl&&s.downloadUrl[3]&&s.downloadUrl[3].url)||(s.downloadUrl&&s.downloadUrl[2]&&s.downloadUrl[2].url)||'';
+  const artistName=(s.artists&&s.artists.primary&&s.artists.primary.map(a=>a.name).join(', '))||s.primaryArtists||'—';
+  return{id:s.id||i,title:s.name||'Unknown',name:s.name||'Unknown',artist:artistName,channelTitle:artistName,thumbnail:art,image:art,previewUrl:streamUrl};
 }
 
 async function loadTrending(){
-  const queries=['trending hindi 2025','arijit singh','bollywood hits 2024','top english hits','global top hits'];
+  const queries=['trending bollywood 2025','arijit singh hits','punjabi hits 2025','top hindi songs','atif aslam'];
   const q=queries[Math.floor(Math.random()*queries.length)];
   try{
-    const r=await fetch(`${ITUNES_SEARCH_BASE}?term=${encodeURIComponent(q)}&media=music&limit=20`);
+    const r=await fetch(`${SAAVN}/search/songs?query=${encodeURIComponent(q)}&limit=20&page=1`);
     const d=await r.json();
-    queue=(d.results||[]).slice(0,20).map((s,i)=>normalizeITunesTrack(s,i));
+    queue=((d.data&&d.data.results)||[]).slice(0,20).map((s,i)=>normalizeSaavnTrack(s,i));
     document.getElementById('songCount').textContent=queue.length+' songs';
     renderGrid(queue,'songsGrid');
     loadMadeFor();
@@ -403,11 +405,11 @@ async function loadTrending(){
 
 async function loadMadeFor(){
   try{
-    const q2=['lofi chill','night vibes songs','old classic songs'];
+    const q2=['old hindi classics','kishore kumar','lata mangeshkar'];
     const q=q2[Math.floor(Math.random()*q2.length)];
-    const r=await fetch(`${ITUNES_SEARCH_BASE}?term=${encodeURIComponent(q)}&media=music&limit=8`);
+    const r=await fetch(`${SAAVN}/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
     const d=await r.json();
-    const songs=(d.results||[]).slice(0,8).map((s,i)=>normalizeITunesTrack(s,i));
+    const songs=((d.data&&d.data.results)||[]).slice(0,8).map((s,i)=>normalizeSaavnTrack(s,i));
     if(songs.length){madeForQueue=songs;document.getElementById('madeForSection').style.display='';renderGrid(songs,'madeForGrid',true);}
   }catch{}
 }
@@ -502,8 +504,18 @@ async function loadLyrics(id,title='',artist=''){
     if(cleanArtist.includes('&'))cleanArtist=cleanArtist.split('&').map(p=>p.trim()).pop();
     if(cleanArtist.includes(','))cleanArtist=cleanArtist.split(',').map(p=>p.trim()).pop();
     cleanArtist=cleanArtist.replace(/\(.*?\)/g,'').replace(/feat\..*/i,'').trim();
-    const lyricsRes=await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(cleanArtist||'')}/${encodeURIComponent(cleanTitle||'')}`);
-    const lyricsData=await lyricsRes.json();const txt=lyricsData.lyrics||'';
+    // Try Saavn lyrics first, fallback to lyrics.ovh
+    let txt = '';
+    try {
+      const saavnLyrics = await fetch(`${SAAVN}/songs/${id}/lyrics`);
+      const saavnData = await saavnLyrics.json();
+      txt = (saavnData.data && saavnData.data.lyrics) || '';
+    } catch {}
+    if(!txt) {
+      const lyricsRes=await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(cleanArtist||'')}/${encodeURIComponent(cleanTitle||'')}`);
+      const lyricsData=await lyricsRes.json();
+      txt=lyricsData.lyrics||'';
+    }
     if(txt&&txt.length>20){const dur=audio.duration||30;_lyricWords=buildLyricWords(txt,dur);renderLyricDOM(_lyricWords);}
     else{el.className='';el.innerHTML='<span class="lyrics-status">No lyrics available for this song.</span>';}
   }catch{el.className='';el.innerHTML='<span class="lyrics-status">Could not load lyrics.</span>';}
@@ -579,9 +591,9 @@ document.addEventListener('click',e=>{
 async function doSearch(q){
   const dd=document.getElementById('searchDropdown');
   try{
-    const r=await fetch(`${ITUNES_SEARCH_BASE}?term=${encodeURIComponent(q)}&media=music&limit=8`);
+    const r=await fetch(`${SAAVN}/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
     const d=await r.json();
-    const songs=(d.results||[]).slice(0,8).map((s,i)=>normalizeITunesTrack(s,i));
+    const songs=((d.data&&d.data.results)||[]).slice(0,8).map((s,i)=>normalizeSaavnTrack(s,i));
     window._sr=songs;
     if(!songs.length){dd.innerHTML='<div class="search-loading">No results</div>';return;}
     dd.innerHTML=songs.map((s,i)=>{
