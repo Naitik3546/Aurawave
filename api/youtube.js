@@ -25,14 +25,19 @@ export default async function handler(req, res) {
         if (!r.ok) continue;
         const data = await r.json();
         if (!Array.isArray(data)) continue;
-        const results = data.slice(0, 10).map(v => ({
-          id: v.videoId,
-          title: v.title,
-          artist: v.author,
-          thumbnail: (v.videoThumbnails && (v.videoThumbnails[0]?.url || v.videoThumbnails[0]?.url)) || `https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`,
-          duration: v.lengthSeconds,
-        }));
-        return res.status(200).json({ results });
+        // Filter out karaoke, nightcore, covers, instrumentals
+        const junk = /karaoke|nightcore|instrumental|cover|remix|sped up|lofi|lo-fi|reverb|slowed/i;
+        const filtered = data
+          .filter(v => v.videoId && v.title && !junk.test(v.title))
+          .slice(0, 10)
+          .map(v => ({
+            id: v.videoId,
+            title: v.title,
+            artist: v.author,
+            thumbnail: (v.videoThumbnails && v.videoThumbnails[0]?.url) || `https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`,
+            duration: v.lengthSeconds,
+          }));
+        return res.status(200).json({ results: filtered });
       } catch { continue; }
     }
     return res.status(500).json({ error: 'Search failed on all instances' });
