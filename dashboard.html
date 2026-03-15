@@ -448,6 +448,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 // ── Constants ──
 const PROXY = 'https://aurawave-flame.vercel.app/api/proxy?path=';
 const STREAM_PROXY = 'https://aurawave-flame.vercel.app/api/stream?url=';
+const YT_API = 'https://aurawave-flame.vercel.app/api/youtube';
 
 async function saavnFetch(path) {
   const r = await fetch(PROXY + encodeURIComponent(path));
@@ -537,10 +538,18 @@ async function playSong(idx, gridId) {
   const title=song.title||song.name||'Unknown', artist=song.artist||song.channelTitle||'—', thumb=song.thumbnail||song.image||'';
   setMeta(title,artist,thumb); updateLikeBtn(); rerenderCurrent(gridId);
   try {
-    const url=song.previewUrl;
+    let url = song.previewUrl;
+    // If it's a YouTube song, fetch the audio URL on the fly
+    if (!url && song._ytId) {
+      document.getElementById('pArtist').textContent = 'Loading...';
+      const ytRes = await fetch(`${YT_API}?action=audio&id=${song._ytId}`);
+      const ytData = await ytRes.json();
+      url = ytData.audioUrl || '';
+      if (url) song.previewUrl = url; // cache it
+    }
     if(url){ audio.src=url; audio.volume=document.getElementById('volSlider').value/100; await audio.play(); isPlaying=true; updatePlayUI(); }
-    else document.getElementById('pArtist').textContent='No preview available';
-  } catch(e){ console.warn(e); }
+    else document.getElementById('pArtist').textContent='No audio available';
+  } catch(e){ console.warn(e); document.getElementById('pArtist').textContent='Playback error'; }
   loadLyrics(song.id, title, artist);
 }
 
@@ -688,23 +697,44 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('.user-wrap')) document.getElementById('userDropdown').classList.remove('show');
 });
 async function doSearch(q) {
-  const dd=document.getElementById('searchDropdown');
+  const dd = document.getElementById('searchDropdown');
   try {
-    const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
-    const songs=((d.data&&d.data.results)||[]).slice(0,8).map((s,i)=>normalizeSaavn(s,i));
-    window._sr=songs;
-    if(!songs.length){ dd.innerHTML='<div class="search-loading">No results</div>'; return; }
-    dd.innerHTML=songs.map((s,i)=>{
-      const title=s.title||s.name||'Unknown', artist=s.artist||'—', thumb=s.thumbnail||s.image||'';
-      return `<div class="search-item" onclick="pickSearch(${i})"><div class="search-thumb">${thumb?`<img src="${thumb}" onerror="this.innerHTML='♪'">`:'♪'}</div><div class="search-info"><div class="search-name">${title}</div><div class="search-artist">${artist}</div></div></div>`;
+    // Try JioSaavn first (Indian songs — full audio)
+    const d = await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
+    let songs = ((d.data && d.data.results) || []).slice(0, 8).map((s, i) => normalizeSaavn(s, i));
+
+    // If no results, fall back to YouTube via Invidious (English/any songs)
+    if (!songs.length) {
+      try {
+        const ytRes = await fetch(`${YT_API}?action=search&q=${encodeURIComponent(q + ' official audio')}`);
+        const ytData = await ytRes.json();
+        songs = (ytData.results || []).map((v, i) => ({
+          id: v.id, title: v.title, name: v.title,
+          artist: v.artist, channelTitle: v.artist,
+          thumbnail: v.thumbnail, image: v.thumbnail,
+          previewUrl: '', _ytId: v.id, _isYt: true
+        }));
+      } catch {}
+    }
+
+    window._sr = songs;
+    if (!songs.length) { dd.innerHTML = '<div class="search-loading">No results</div>'; return; }
+    dd.innerHTML = songs.map((s, i) => {
+      const title = s.title || s.name || 'Unknown';
+      const artist = s.artist || s.channelTitle || '—';
+      const thumb = s.thumbnail || s.image || '';
+      const badge = s._isYt ? ' <span style="font-size:9px;background:#ff0000;color:#fff;border-radius:3px;padding:1px 4px">YT</span>' : '';
+      return `<div class="search-item" onclick="pickSearch(${i})"><div class="search-thumb">${thumb?`<img src="${thumb}" onerror="this.innerHTML='♪'">`:'♪'}</div><div class="search-info"><div class="search-name">${title}${badge}</div><div class="search-artist">${artist}</div></div></div>`;
     }).join('');
-  } catch { dd.innerHTML='<div class="search-loading">Error searching</div>'; }
+  } catch(e) { dd.innerHTML = '<div class="search-loading">Error searching</div>'; }
 }
 function pickSearch(i) {
-  if(!window._sr) return;
-  queue=window._sr; currentIdx=i; activePlaylist='trending';
-  document.getElementById('searchDropdown').classList.remove('show'); document.getElementById('searchInput').value='';
-  document.getElementById('songCount').textContent=queue.length+' songs'; renderGrid(queue,'songsGrid'); playSong(i,'songsGrid');
+  if (!window._sr) return;
+  queue = window._sr; currentIdx = i; activePlaylist = 'trending';
+  document.getElementById('searchDropdown').classList.remove('show');
+  document.getElementById('searchInput').value = '';
+  document.getElementById('songCount').textContent = queue.length + ' songs';
+  renderGrid(queue, 'songsGrid'); playSong(i, 'songsGrid');
 }
 function toggleLike(idx,gridId) {
   const list=gridId==='likedSongsGrid'?likedSongs:queue; const song=list[idx]; if(!song) return;
