@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   if (!path) return res.status(400).json({ error: 'No path provided' });
 
   try {
-    const url = `https://jiosaavn-api-sigma-sandy.vercel.app${path}`;
+   const url = `https://jiosaavn-api-sigma-sandy.vercel.app/api${path}`;
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' }
     });
