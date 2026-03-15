@@ -14,7 +14,7 @@ export default async function handler(req, res) {
       // yt-search via suggest API + oEmbed (no key needed)
       async () => {
         const r = await fetch(
-          `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&videoCategoryId=10&maxResults=10&key=AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY`,
+          `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&videoCategoryId=10&maxResults=10&key=AIzaSyDHxAIUj9kphJcRumopPV4LITZhUoYgNhE`,
           { signal: AbortSignal.timeout(7000) }
         );
         if (!r.ok) throw new Error('failed');
