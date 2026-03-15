@@ -22,7 +22,7 @@
   --green:#1db954;
   --player-h:88px;
 }
-html,body{height:100%;overflow:hidden;background:var(--bg);}
+.bottom-nav { display: none; }
 body{
   font-family:'DM Mono',monospace;
   color:var(--text);
@@ -206,6 +206,123 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 .lyrics-status{font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);line-height:2;padding-top:16px;}
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes mainPan{0%{transform:scale(1.05) translate3d(-24px,-16px,0);}50%{transform:scale(1.12) translate3d(18px,6px,0);}100%{transform:scale(1.08) translate3d(0,22px,0);}}
+
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 768px) {
+  :root { --player-h: 70px; }
+
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 70px 60px;
+    grid-template-areas:
+      "main"
+      "player"
+      "bottomnav";
+  }
+
+  /* Hide desktop sidebar */
+  .sidebar { display: none; }
+
+  /* Main takes full width */
+  .main { grid-area: main; }
+  .main-bg { left: 0; }
+
+  /* Topbar mobile */
+  .topbar { padding: 6px 8px; gap: 6px; }
+  .topbar-nav { padding: 8px 10px; }
+  .topbar-nav button { width: 28px; height: 28px; font-size: 14px; }
+  .search-wrap { padding: 4px 10px; }
+  .search-input { font-size: 12px; padding: 8px 8px 8px 32px; }
+  .search-icon { left: 20px; }
+  .user-btn { padding: 6px 10px 6px 6px; }
+  .user-name { display: none; }
+
+  /* Content padding */
+  .content { padding: 0 12px 24px; }
+
+  /* Quick grid */
+  .quick-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .quick-card { height: 48px; }
+  .quick-card-thumb { width: 48px; height: 48px; font-size: 18px; }
+  .quick-card-name { font-size: 12px; }
+
+  /* Section title */
+  .section-title { font-size: 18px; }
+
+  /* Song cards — 2 per row on mobile */
+  .cards-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .song-card { padding: 10px; }
+  .song-title { font-size: 11px; }
+  .song-artist { font-size: 10px; }
+  .play-hover { width: 34px; height: 34px; font-size: 13px; bottom: 6px; right: 6px; }
+  .like-btn { width: 24px; height: 24px; font-size: 11px; opacity: 1; }
+
+  /* Player bar mobile */
+  .player { padding: 0 10px; gap: 8px; }
+  .p-track { width: auto; flex: 1; min-width: 0; }
+  .p-thumb { width: 42px; height: 42px; }
+  .p-name { font-size: 12px; }
+  .p-artist { font-size: 10px; }
+  .p-like { display: none; }
+
+  /* Hide progress bar on mobile player — show in expanded */
+  .p-bar { display: none; }
+  .p-center { gap: 0; }
+  .p-controls { gap: 12px; }
+  .ctrl { font-size: 14px; }
+  .ctrl-play { width: 32px; height: 32px; font-size: 13px; }
+
+  /* Hide volume on mobile */
+  .p-right { display: none; }
+
+  /* Bottom navigation bar */
+  .bottom-nav {
+    grid-area: bottomnav;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: #0a0a0a;
+    border-top: 1px solid #1a1a1a;
+    padding: 6px 0;
+    z-index: 60;
+  }
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    padding: 4px 16px;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+  .bottom-nav-item.active { color: var(--text); }
+  .bottom-nav-item svg { width: 20px; height: 20px; }
+
+  /* Expanded view mobile */
+  .expanded { flex-direction: column; }
+  .exp-left {
+    flex: none;
+    padding: 40px 24px 20px;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #1a1a1a;
+  }
+  .exp-art { width: 180px; height: 180px; }
+  .exp-title { font-size: 18px; }
+  .exp-right { padding: 20px 24px; }
+  .lyric-words { font-size: 20px; }
+
+  /* Search dropdown mobile */
+  .search-dropdown { border-radius: 8px; }
+
+  /* User dropdown mobile */
+  .user-dropdown { right: 0; width: 180px; }
+}
 </style>
 
 </head>
@@ -375,6 +492,26 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 </div>
 
 <audio id="audioEl"></audio>
+
+<!-- Mobile Bottom Nav -->
+<nav class="bottom-nav" id="bottomNav">
+  <div class="bottom-nav-item active" id="bnHome" onclick="showSection('home', document.getElementById('navHome')); setBottomNav('bnHome')">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L2 12h3v8h6v-5h2v5h6v-8h3z"/></svg>
+    Home
+  </div>
+  <div class="bottom-nav-item" id="bnSearch" onclick="document.getElementById('searchInput').focus(); setBottomNav('bnSearch')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    Search
+  </div>
+  <div class="bottom-nav-item" id="bnLiked" onclick="showSection('liked', document.getElementById('navLiked')); setBottomNav('bnLiked')">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+    Liked
+  </div>
+  <div class="bottom-nav-item" id="bnNowPlaying" onclick="openExpanded()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+    Now Playing
+  </div>
+</nav>
 
 <script>
 const SAAVN='https://jiosaavn-api-sigma-sandy.vercel.app/api';
@@ -656,6 +793,11 @@ function closeExpanded(){document.getElementById('expandedView').classList.remov
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeExpanded();if(e.key===' '&&e.target.tagName!=='INPUT'){e.preventDefault();togglePlay();}});
 
 function toggleUserDropdown(){document.getElementById('userDropdown').classList.toggle('show');}
+function setBottomNav(id){
+  document.querySelectorAll('.bottom-nav-item').forEach(n=>n.classList.remove('active'));
+  const el=document.getElementById(id);
+  if(el)el.classList.add('active');
+}
 function logOut(){
   if(confirm('Log out of AuraWave?')){
     if(window._fbAuth)window._fbAuth.signOut().then(()=>window.location.replace('index.html'));
