@@ -525,12 +525,14 @@ async function saavnFetch(path){
   return r.json();
 }
 
-function normalizeSaavn(s,i=0){
-  const art=(s.image&&(s.image[2]||s.image[1]||s.image[0]))?.url||'';
-  const url=(s.downloadUrl&&(s.downloadUrl[4]||s.downloadUrl[3]||s.downloadUrl[2]))?.url||'';
-  const artist=(s.artists?.primary?.map(a=>a.name).join(', '))||s.primaryArtists||'—';
-  return{id:s.id||i,title:s.name||'Unknown',name:s.name||'Unknown',
-    artist,channelTitle:artist,thumbnail:art,image:art,previewUrl:url};
+function normalizeSaavn(s, i = 0) {
+  const art = (s.image && (s.image[2] || s.image[1] || s.image[0]))?.url || '';
+  const rawUrl = (s.downloadUrl && (s.downloadUrl[4] || s.downloadUrl[3] || s.downloadUrl[2]))?.url || '';
+  // Route through streaming proxy
+  const url = rawUrl ? `https://aurawave-flame.vercel.app/api/stream?url=${encodeURIComponent(rawUrl)}` : '';
+  const artist = (s.artists?.primary?.map(a => a.name).join(', ')) || s.primaryArtists || '—';
+  return { id: s.id || i, title: s.name || 'Unknown', name: s.name || 'Unknown',
+    artist, channelTitle: artist, thumbnail: art, image: art, previewUrl: url };
 }
 
 async function itunesFetch(q,limit=20){
@@ -548,11 +550,12 @@ let queue=[],currentIdx=-1,isPlaying=false,isLooping=false,searchTimer=null;
 let currentSong=null,madeForQueue=[],activePlaylist='trending';
 let likedSongs=JSON.parse(localStorage.getItem('aw_liked')||'[]');
 
-function normalizeSaavnTrack(s,i=0){
-  const art=(s.image&&s.image[2]&&s.image[2].url)||(s.image&&s.image[1]&&s.image[1].url)||(s.image&&s.image[0]&&s.image[0].url)||'';
-  const streamUrl=(s.downloadUrl&&s.downloadUrl[4]&&s.downloadUrl[4].url)||(s.downloadUrl&&s.downloadUrl[3]&&s.downloadUrl[3].url)||(s.downloadUrl&&s.downloadUrl[2]&&s.downloadUrl[2].url)||'';
-  const artistName=(s.artists&&s.artists.primary&&s.artists.primary.map(a=>a.name).join(', '))||s.primaryArtists||'—';
-  return{id:s.id||i,title:s.name||'Unknown',name:s.name||'Unknown',artist:artistName,channelTitle:artistName,thumbnail:art,image:art,previewUrl:streamUrl};
+function normalizeSaavnTrack(s, i = 0) {
+  const art = (s.image&&s.image[2]&&s.image[2].url)||(s.image&&s.image[1]&&s.image[1].url)||(s.image&&s.image[0]&&s.image[0].url)||'';
+  const rawUrl = (s.downloadUrl&&s.downloadUrl[4]&&s.downloadUrl[4].url)||(s.downloadUrl&&s.downloadUrl[3]&&s.downloadUrl[3].url)||(s.downloadUrl&&s.downloadUrl[2]&&s.downloadUrl[2].url)||'';
+  const url = rawUrl ? `https://aurawave-flame.vercel.app/api/stream?url=${encodeURIComponent(rawUrl)}` : '';
+  const artistName = (s.artists&&s.artists.primary&&s.artists.primary.map(a=>a.name).join(', '))||s.primaryArtists||'—';
+  return { id:s.id||i, title:s.name||'Unknown', name:s.name||'Unknown', artist:artistName, channelTitle:artistName, thumbnail:art, image:art, previewUrl:url };
 }
 
 async function loadTrending(){
@@ -560,7 +563,7 @@ async function loadTrending(){
   const q=queries[Math.floor(Math.random()*queries.length)];
   try{
     const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=20&page=1`);
-    queue=((d.data&&d.data.results)||[]).slice(0,20).map((s,i)=>normalizeItunes(s,i));
+    queue=((d.data&&d.data.results)||[]).slice(0,20).map((s,i)=>normalizeSaavn(s,i));
     document.getElementById('songCount').textContent=queue.length+' songs';
     renderGrid(queue,'songsGrid');
     loadMadeFor();
