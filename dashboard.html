@@ -30,6 +30,9 @@ body{
   grid-template-columns:280px 1fr;
   grid-template-rows:1fr var(--player-h);
   grid-template-areas:"sidebar main" "player player";
+  height:100vh;
+  max-height:100vh;
+  overflow:hidden;
 }
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
@@ -515,6 +518,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 
 <script>
 const SAAVN='https://jiosaavn-api-sigma-sandy.vercel.app/api';
+const CORS_PROXY='https://corsproxy.io/?';
+function saavnFetch(path){
+  return fetch(CORS_PROXY+encodeURIComponent(SAAVN+path))
+    .then(r=>r.json());
+}
 const audio=document.getElementById('audioEl');
 let queue=[],currentIdx=-1,isPlaying=false,isLooping=false,searchTimer=null;
 let currentSong=null,madeForQueue=[],activePlaylist='trending';
@@ -531,8 +539,7 @@ async function loadTrending(){
   const queries=['trending bollywood 2025','arijit singh hits','punjabi hits 2025','top hindi songs','atif aslam'];
   const q=queries[Math.floor(Math.random()*queries.length)];
   try{
-    const r=await fetch(`${SAAVN}/search/songs?query=${encodeURIComponent(q)}&limit=20&page=1`);
-    const d=await r.json();
+    const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=20&page=1`);
     queue=((d.data&&d.data.results)||[]).slice(0,20).map((s,i)=>normalizeSaavnTrack(s,i));
     document.getElementById('songCount').textContent=queue.length+' songs';
     renderGrid(queue,'songsGrid');
@@ -544,8 +551,7 @@ async function loadMadeFor(){
   try{
     const q2=['old hindi classics','kishore kumar','lata mangeshkar'];
     const q=q2[Math.floor(Math.random()*q2.length)];
-    const r=await fetch(`${SAAVN}/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
-    const d=await r.json();
+    const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
     const songs=((d.data&&d.data.results)||[]).slice(0,8).map((s,i)=>normalizeSaavnTrack(s,i));
     if(songs.length){madeForQueue=songs;document.getElementById('madeForSection').style.display='';renderGrid(songs,'madeForGrid',true);}
   }catch{}
@@ -728,8 +734,7 @@ document.addEventListener('click',e=>{
 async function doSearch(q){
   const dd=document.getElementById('searchDropdown');
   try{
-    const r=await fetch(`${SAAVN}/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
-    const d=await r.json();
+    const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
     const songs=((d.data&&d.data.results)||[]).slice(0,8).map((s,i)=>normalizeSaavnTrack(s,i));
     window._sr=songs;
     if(!songs.length){dd.innerHTML='<div class="search-loading">No results</div>';return;}
@@ -840,24 +845,35 @@ _auth.onAuthStateChanged(async(user)=>{
   window._fbUser=user;
   document.body.style.visibility='visible';
 
-  // Update UI
-  const name=user.displayName||user.email.split('@')[0];
-  document.getElementById('userName').textContent=name;
-  document.getElementById('dropdownName').textContent=name+' 🎧';
-  document.getElementById('madeForName').textContent=name;
-  const avatarEl=document.getElementById('userAvatar');
-  if(user.photoURL){avatarEl.innerHTML=`<img src="${user.photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;}
-  else{avatarEl.textContent=name.charAt(0).toUpperCase();}
-
-  // Load liked songs from Firestore
-  try{
-    const snap=await _db.collection('users').doc(user.uid).get();
-    if(snap.exists&&snap.data().likedSongs&&snap.data().likedSongs.length){
-      likedSongs=snap.data().likedSongs;
-      localStorage.setItem('aw_liked',JSON.stringify(likedSongs));
-      updateLikedUI();
+  // Load user data from Firestore (name + liked songs)
+  let name = user.displayName || '';
+  try {
+    const snap = await _db.collection('users').doc(user.uid).get();
+    if(snap.exists){
+      // Get name from Firestore (most accurate — entered during signup)
+      if(snap.data().name) name = snap.data().name;
+      // Load liked songs
+      if(snap.data().likedSongs && snap.data().likedSongs.length){
+        likedSongs = snap.data().likedSongs;
+        localStorage.setItem('aw_liked', JSON.stringify(likedSongs));
+        updateLikedUI();
+      }
     }
-  }catch(e){console.warn('Could not load liked songs',e);}
+  } catch(e) { console.warn('Firestore error', e); }
+
+  // Final fallback — never show email
+  if(!name || name.includes('@')) name = user.email.split('@')[0];
+
+  // Update all UI elements with name
+  document.getElementById('userName').textContent = name;
+  document.getElementById('dropdownName').textContent = name + ' 🎧';
+  document.getElementById('madeForName').textContent = name;
+  const avatarEl = document.getElementById('userAvatar');
+  if(user.photoURL){
+    avatarEl.innerHTML = `<img src="${user.photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+  } else {
+    avatarEl.textContent = name.charAt(0).toUpperCase();
+  }
 });
 </script>
 </body>
