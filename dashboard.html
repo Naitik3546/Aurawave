@@ -851,34 +851,27 @@ _auth.onAuthStateChanged(async(user)=>{
   document.body.style.visibility='visible';
 
   // Load user data from Firestore (name + liked songs)
-  let name = user.displayName || '';
+  let name = '';
   try {
     const snap = await _db.collection('users').doc(user.uid).get();
-    if(snap.exists){
-      // Get name from Firestore (most accurate — entered during signup)
-      if(snap.data().name) name = snap.data().name;
+    if(snap.exists && snap.data()){
+      const data = snap.data();
+      // Firestore name is ALWAYS the source of truth
+      if(data.name) name = data.name;
       // Load liked songs
-      if(snap.data().likedSongs && snap.data().likedSongs.length){
-        likedSongs = snap.data().likedSongs;
+      if(data.likedSongs && data.likedSongs.length){
+        likedSongs = data.likedSongs;
         localStorage.setItem('aw_liked', JSON.stringify(likedSongs));
         updateLikedUI();
       }
     }
   } catch(e) { console.warn('Firestore error', e); }
 
-  // If name looks like email or is empty, try to get a proper name
-  if(!name || name.includes('@') || name === user.email.split('@')[0]) {
-    // Try Firebase Auth displayName (set during Google login)
-    if(user.displayName) {
-      name = user.displayName;
-      // Save proper name back to Firestore
-      try { await _db.collection('users').doc(user.uid).update({ name: name }); } catch {}
-    } else {
-      // Clean up email-based name - capitalize first letter
-      name = user.email.split('@')[0];
-      name = name.charAt(0).toUpperCase() + name.slice(1);
-    }
-  }
+  // Fallbacks only if Firestore has no name
+  if(!name) name = user.displayName || '';
+  if(!name) name = user.email.split('@')[0];
+  // Capitalize first letter
+  if(name) name = name.charAt(0).toUpperCase() + name.slice(1);
 
   // Update all UI elements with name
   document.getElementById('userName').textContent = name;
