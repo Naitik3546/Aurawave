@@ -990,6 +990,8 @@ window.handleSignup = async function() {
   btn.textContent = 'Creating...'; btn.disabled = true;
   try {
     const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    // Update Auth profile with name first
+    await cred.user.updateProfile({ displayName: name });
     await saveUser({ ...cred.user, displayName: name });
     window.location.replace('dashboard.html');
   } catch(e) {
