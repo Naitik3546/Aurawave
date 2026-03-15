@@ -517,10 +517,25 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 </nav>
 
 <script>
+const PROXY='https://aurawave-flame.vercel.app/api/proxy?path=';
 const ITUNES='https://itunes.apple.com/search';
-function itunesFetch(q, limit=20){
-  return fetch(`${ITUNES}?term=${encodeURIComponent(q)}&media=music&entity=song&limit=${limit}`)
-    .then(r=>r.json());
+
+async function saavnFetch(path){
+  const r = await fetch(PROXY + encodeURIComponent(path));
+  return r.json();
+}
+
+function normalizeSaavn(s,i=0){
+  const art=(s.image&&(s.image[2]||s.image[1]||s.image[0]))?.url||'';
+  const url=(s.downloadUrl&&(s.downloadUrl[4]||s.downloadUrl[3]||s.downloadUrl[2]))?.url||'';
+  const artist=(s.artists?.primary?.map(a=>a.name).join(', '))||s.primaryArtists||'—';
+  return{id:s.id||i,title:s.name||'Unknown',name:s.name||'Unknown',
+    artist,channelTitle:artist,thumbnail:art,image:art,previewUrl:url};
+}
+
+async function itunesFetch(q,limit=20){
+  const r=await fetch(`${ITUNES}?term=${encodeURIComponent(q)}&media=music&entity=song&limit=${limit}`);
+  return r.json();
 }
 function normalizeItunes(s,i){
   const art=(s.artworkUrl100||s.artworkUrl60||'').replace('100x100','300x300');
@@ -554,10 +569,10 @@ async function loadTrending(){
 
 async function loadMadeFor(){
   try{
-    const q2=['lofi chill beats','classic rock hits','jazz piano'];
+    const q2=['old hindi classics','kishore kumar hits','lata mangeshkar songs'];
     const q=q2[Math.floor(Math.random()*q2.length)];
-    const d=await itunesFetch(q,8);
-    const songs=(d.results||[]).slice(0,8).map((s,i)=>normalizeItunes(s,i));
+    const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
+    const songs=((d.data&&d.data.results)||[]).slice(0,8).map((s,i)=>normalizeSaavn(s,i));
     if(songs.length){madeForQueue=songs;document.getElementById('madeForSection').style.display='';renderGrid(songs,'madeForGrid',true);}
   }catch{}
 }
@@ -739,8 +754,8 @@ document.addEventListener('click',e=>{
 async function doSearch(q){
   const dd=document.getElementById('searchDropdown');
   try{
-    const d=await itunesFetch(q,8);
-    const songs=(d.results||[]).slice(0,8).map((s,i)=>normalizeItunes(s,i));
+    const d=await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
+    const songs=((d.data&&d.data.results)||[]).slice(0,8).map((s,i)=>normalizeSaavn(s,i));
     window._sr=songs;
     if(!songs.length){dd.innerHTML='<div class="search-loading">No results</div>';return;}
     dd.innerHTML=songs.map((s,i)=>{
