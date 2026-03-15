@@ -706,7 +706,7 @@ async function doSearch(q) {
     // If no results, fall back to YouTube via Invidious (English/any songs)
     if (!songs.length) {
       try {
-        const ytRes = await fetch(`${YT_API}?action=search&q=${encodeURIComponent(q + ' audio')}`);
+        const ytRes = await fetch(`${YT_API}?action=search&q=${encodeURIComponent(q)}`);
         const ytData = await ytRes.json();
         songs = (ytData.results || []).map((v, i) => ({
           id: v.id, title: v.title, name: v.title,
