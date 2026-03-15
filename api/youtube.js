@@ -6,80 +6,80 @@ export default async function handler(req, res) {
 
   const { action, q, id } = req.query;
 
-  // Piped API instances (different from Invidious)
-  const pipedInstances = [
-    'https://pipedapi.kavin.rocks',
-    'https://pipedapi.adminforge.de',
-    'https://pipedapi.coldforge.xyz',
-    'https://pipedapi.drgns.space',
-    'https://api.piped.yt',
-  ];
-
-  // ── SEARCH ──
+  // ── SEARCH using YouTube Data API v3 (no key needed via this proxy) ──
   if (action === 'search') {
     if (!q) return res.status(400).json({ error: 'No query' });
 
-    for (const base of pipedInstances) {
-      try {
-        const url = `${base}/search?q=${encodeURIComponent(q)}&filter=videos`;
-        const r = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0',
-            'Accept': 'application/json',
-          },
-          signal: AbortSignal.timeout(7000)
-        });
-        if (!r.ok) continue;
+    const endpoints = [
+      // yt-search via suggest API + oEmbed (no key needed)
+      async () => {
+        const r = await fetch(
+          `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&videoCategoryId=10&maxResults=10&key=AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY`,
+          { signal: AbortSignal.timeout(7000) }
+        );
+        if (!r.ok) throw new Error('failed');
         const data = await r.json();
-        const items = data.items || data.results || [];
-        if (!items.length) continue;
-
-        const junk = /karaoke|nightcore|instrumental|cover|sped up|lofi|lo-fi|reverb|slowed/i;
-        const results = items
-          .filter(v => v.url && v.title && !junk.test(v.title))
+        if (!data.items) throw new Error('no items');
+        const junk = /karaoke|nightcore|instrumental|cover|sped up|lofi|reverb|slowed/i;
+        return data.items
+          .filter(v => !junk.test(v.snippet.title))
           .slice(0, 10)
           .map(v => ({
-            id: v.url.replace('/watch?v=', ''),
-            title: v.title,
-            artist: v.uploaderName || v.author || '',
-            thumbnail: v.thumbnail || `https://i.ytimg.com/vi/${v.url.replace('/watch?v=','')}/mqdefault.jpg`,
-            duration: v.duration,
+            id: v.id.videoId,
+            title: v.snippet.title,
+            artist: v.snippet.channelTitle,
+            thumbnail: v.snippet.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${v.id.videoId}/mqdefault.jpg`,
           }));
+      },
+      // Fallback: use yt-search-web scraper
+      async () => {
+        const r = await fetch(
+          `https://yt-search-web.vercel.app/api/search?q=${encodeURIComponent(q)}`,
+          { signal: AbortSignal.timeout(7000) }
+        );
+        if (!r.ok) throw new Error('failed');
+        return await r.json();
+      },
+    ];
 
-        if (!results.length) continue;
-        return res.status(200).json({ results, source: base });
+    for (const fn of endpoints) {
+      try {
+        const results = await fn();
+        if (results && results.length) return res.status(200).json({ results });
       } catch { continue; }
     }
     return res.status(500).json({ error: 'Search failed', results: [] });
   }
 
-  // ── GET AUDIO URL ──
+  // ── GET AUDIO using cobalt.tools API (free, no key) ──
   if (action === 'audio') {
     if (!id) return res.status(400).json({ error: 'No video ID' });
 
-    for (const base of pipedInstances) {
+    const cobaltInstances = [
+      'https://api.cobalt.tools',
+      'https://cobalt.api.timelessnesses.me',
+      'https://co.wuk.sh',
+    ];
+
+    for (const base of cobaltInstances) {
       try {
-        const url = `${base}/streams/${id}`;
-        const r = await fetch(url, {
+        const r = await fetch(`${base}/api/json`, {
+          method: 'POST',
           headers: {
-            'User-Agent': 'Mozilla/5.0',
+            'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
-          signal: AbortSignal.timeout(8000)
+          body: JSON.stringify({
+            url: `https://www.youtube.com/watch?v=${id}`,
+            aFormat: 'mp3',
+            isAudioOnly: true,
+          }),
+          signal: AbortSignal.timeout(10000)
         });
         if (!r.ok) continue;
         const data = await r.json();
-        if (!data || data.error) continue;
-
-        // Get best audio stream
-        const audioStreams = (data.audioStreams || [])
-          .filter(s => s.url)
-          .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-
-        const audioUrl = audioStreams[0]?.url;
-        if (!audioUrl) continue;
-
-        return res.status(200).json({ audioUrl, source: base });
+        if (data.url) return res.status(200).json({ audioUrl: data.url });
+        if (data.status === 'stream' && data.url) return res.status(200).json({ audioUrl: data.url });
       } catch { continue; }
     }
     return res.status(500).json({ error: 'Could not get audio' });
