@@ -966,18 +966,45 @@ window.handleLogin = async function() {
   let email = identifier;
   if (!identifier.includes('@')) {
     try {
-      const snap = await db.collection('users')
+      let found = false;
+
+      // Try 1: nameLower field (new users)
+      const snap1 = await db.collection('users')
         .where('nameLower', '==', identifier.toLowerCase())
         .limit(1).get();
-      if (!snap.empty) {
-        email = snap.docs[0].data().email;
-      } else {
-        // Try case-insensitive by appending common domain hints
+      if (!snap1.empty) {
+        email = snap1.docs[0].data().email;
+        found = true;
+      }
+
+      // Try 2: name field exact match (old users)
+      if (!found) {
+        const snap2 = await db.collection('users')
+          .where('name', '==', identifier)
+          .limit(1).get();
+        if (!snap2.empty) {
+          email = snap2.docs[0].data().email;
+          found = true;
+        }
+      }
+
+      // Try 3: name field case-insensitive
+      if (!found) {
+        const snap3 = await db.collection('users')
+          .where('name', '==', identifier.charAt(0).toUpperCase() + identifier.slice(1).toLowerCase())
+          .limit(1).get();
+        if (!snap3.empty) {
+          email = snap3.docs[0].data().email;
+          found = true;
+        }
+      }
+
+      if (!found) {
         btn.textContent = 'Sign in'; btn.disabled = false;
-        showError('⚠ Username not found. Try using your email instead');
+        showError('⚠ Username not found. Please use your email to login');
         return;
       }
-    } catch {
+    } catch(err) {
       btn.textContent = 'Sign in'; btn.disabled = false;
       showError('⚠ Something went wrong. Try again');
       return;
