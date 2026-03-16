@@ -528,6 +528,47 @@ function renderGrid(songs, gridId, isMade=false) {
   }).join('');
 }
 
+// ── YouTube audio URL fetcher (runs client-side to bypass Vercel IP blocks) ──
+async function getYouTubeAudioUrl(videoId) {
+  try {
+    const body = {
+      context: {
+        client: {
+          clientName: 'ANDROID',
+          clientVersion: '18.11.34',
+          androidSdkVersion: 30,
+          hl: 'en',
+          timeZone: 'UTC',
+          utcOffsetMinutes: 0
+        }
+      },
+      videoId: videoId,
+      params: 'CgIQBg=='
+    };
+    const r = await fetch('https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-YouTube-Client-Name': '3',
+        'X-YouTube-Client-Version': '18.11.34',
+      },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    const formats = [
+      ...(data?.streamingData?.adaptiveFormats || []),
+      ...(data?.streamingData?.formats || [])
+    ];
+    const audioFormats = formats
+      .filter(f => f.mimeType?.includes('audio') && f.url)
+      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+    return audioFormats[0]?.url || null;
+  } catch(e) {
+    console.warn('YouTube audio fetch failed:', e);
+    return null;
+  }
+}
+
 async function playSong(idx, gridId) {
   const list = gridId==='likedSongsGrid'?likedSongs:gridId==='madeForGrid'?madeForQueue:queue;
   const song = list[idx]; if(!song) return;
@@ -539,12 +580,10 @@ async function playSong(idx, gridId) {
   setMeta(title,artist,thumb); updateLikeBtn(); rerenderCurrent(gridId);
   try {
     let url = song.previewUrl;
-    // If it's a YouTube song, fetch the audio URL on the fly
+    // If it's a YouTube song, fetch audio URL directly from browser (bypasses Vercel IP block)
     if (!url && song._ytId) {
       document.getElementById('pArtist').textContent = 'Loading...';
-      const ytRes = await fetch(`${YT_API}?action=audio&id=${song._ytId}`);
-      const ytData = await ytRes.json();
-      url = ytData.audioUrl || '';
+      url = await getYouTubeAudioUrl(song._ytId);
       if (url) song.previewUrl = url; // cache it
     }
     if(url){ audio.src=url; audio.volume=document.getElementById('volSlider').value/100; await audio.play(); isPlaying=true; updatePlayUI(); }
