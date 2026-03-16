@@ -1,4 +1,4 @@
-import ytdl from '@distube/ytdl-core';
+import playdl from 'play-dl';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   const { action, q, id } = req.query;
   const YT_KEY = 'AIzaSyDHxAIUj9kphJcRumopPV4LITZhUoYgNhE';
 
-  // ── SEARCH ──
+  // ── SEARCH via YouTube Data API ──
   if (action === 'search') {
     if (!q) return res.status(400).json({ error: 'No query' });
     try {
@@ -35,15 +35,22 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── STREAM AUDIO directly via ytdl-core ──
+  // ── GET AUDIO URL via play-dl ──
   if (action === 'audio') {
     if (!id) return res.status(400).json({ error: 'No video ID' });
     try {
-      const info = await ytdl.getInfo(`https://www.youtube.com/watch?v=${id}`);
-      const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
-      if (!format?.url) throw new Error('No audio format found');
-      return res.status(200).json({ audioUrl: format.url });
+      const stream = await playdl.stream(`https://www.youtube.com/watch?v=${id}`, { quality: 2 });
+      const audioUrl = stream?.stream?.url || null;
+      if (!audioUrl) throw new Error('No URL found');
+      return res.status(200).json({ audioUrl });
     } catch(e) {
+      // Fallback: try getting info directly
+      try {
+        const info = await playdl.video_info(`https://www.youtube.com/watch?v=${id}`);
+        const formats = info?.format || [];
+        const audio = formats.find(f => f.mimeType?.includes('audio'));
+        if (audio?.url) return res.status(200).json({ audioUrl: audio.url });
+      } catch {}
       return res.status(500).json({ error: e.message });
     }
   }
