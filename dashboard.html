@@ -528,47 +528,6 @@ function renderGrid(songs, gridId, isMade=false) {
   }).join('');
 }
 
-// ── YouTube audio URL fetcher (runs client-side to bypass Vercel IP blocks) ──
-async function getYouTubeAudioUrl(videoId) {
-  try {
-    const body = {
-      context: {
-        client: {
-          clientName: 'ANDROID',
-          clientVersion: '18.11.34',
-          androidSdkVersion: 30,
-          hl: 'en',
-          timeZone: 'UTC',
-          utcOffsetMinutes: 0
-        }
-      },
-      videoId: videoId,
-      params: 'CgIQBg=='
-    };
-    const r = await fetch('https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-YouTube-Client-Name': '3',
-        'X-YouTube-Client-Version': '18.11.34',
-      },
-      body: JSON.stringify(body)
-    });
-    const data = await r.json();
-    const formats = [
-      ...(data?.streamingData?.adaptiveFormats || []),
-      ...(data?.streamingData?.formats || [])
-    ];
-    const audioFormats = formats
-      .filter(f => f.mimeType?.includes('audio') && f.url)
-      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-    return audioFormats[0]?.url || null;
-  } catch(e) {
-    console.warn('YouTube audio fetch failed:', e);
-    return null;
-  }
-}
-
 async function playSong(idx, gridId) {
   const list = gridId==='likedSongsGrid'?likedSongs:gridId==='madeForGrid'?madeForQueue:queue;
   const song = list[idx]; if(!song) return;
@@ -580,14 +539,17 @@ async function playSong(idx, gridId) {
   setMeta(title,artist,thumb); updateLikeBtn(); rerenderCurrent(gridId);
   try {
     let url = song.previewUrl;
-    // If it's a YouTube song, fetch audio URL directly from browser (bypasses Vercel IP block)
-    if (!url && song._ytId) {
-      document.getElementById('pArtist').textContent = 'Loading...';
-      url = await getYouTubeAudioUrl(song._ytId);
-      if (url) song.previewUrl = url; // cache it
-    }
-    if(url){ audio.src=url; audio.volume=document.getElementById('volSlider').value/100; await audio.play(); isPlaying=true; updatePlayUI(); }
-    else document.getElementById('pArtist').textContent='No audio available';
+    if(url){
+      audio.src=url;
+      audio.volume=document.getElementById('volSlider').value/100;
+      await audio.play();
+      isPlaying=true;
+      updatePlayUI();
+      // Show 30s note for iTunes songs
+      if(song._isItunes){
+        document.getElementById('pArtist').textContent = artist + ' • 30s preview only';
+      }
+    } else document.getElementById('pArtist').textContent='No audio available';
   } catch(e){ console.warn(e); document.getElementById('pArtist').textContent='Playback error'; }
   loadLyrics(song.id, title, artist);
 }
@@ -741,7 +703,7 @@ async function doSearch(q) {
     // Run JioSaavn + YouTube searches in parallel
     const [saavnRes, ytRes] = await Promise.allSettled([
       saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=5&page=1`),
-      fetch(`${YT_API}?action=search&q=${encodeURIComponent(q)}`).then(r=>r.json())
+      fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=8`).then(r=>r.json())
     ]);
 
     // JioSaavn results (Indian songs)
@@ -749,13 +711,14 @@ async function doSearch(q) {
       ? ((saavnRes.value.data && saavnRes.value.data.results) || []).slice(0,5).map((s,i) => normalizeSaavn(s,i))
       : [];
 
-    // YouTube results (English/all songs)
+    // iTunes results (English songs — 30s previews)
     const ytSongs = ytRes.status === 'fulfilled'
-      ? (ytRes.value.results || []).slice(0,8).map(v => ({
-          id: v.id, title: v.title, name: v.title,
-          artist: v.artist, channelTitle: v.artist,
-          thumbnail: v.thumbnail, image: v.thumbnail,
-          previewUrl: '', _ytId: v.id, _isYt: true
+      ? ((ytRes.value.results) || []).slice(0,8).map(v => ({
+          id: v.trackId||v.id, title: v.trackName||v.title, name: v.trackName||v.title,
+          artist: v.artistName||v.artist, channelTitle: v.artistName||v.artist,
+          thumbnail: (v.artworkUrl100||v.thumbnail||'').replace('100x100','300x300'),
+          image: (v.artworkUrl100||v.thumbnail||'').replace('100x100','300x300'),
+          previewUrl: v.previewUrl||'', _isItunes: true
         }))
       : [];
 
@@ -768,7 +731,7 @@ async function doSearch(q) {
       const title = s.title || s.name || 'Unknown';
       const artist = s.artist || s.channelTitle || '—';
       const thumb = s.thumbnail || s.image || '';
-      const badge = s._isYt ? ' <span style="font-size:9px;background:#ff0000;color:#fff;border-radius:3px;padding:1px 4px">YT</span>' : '';
+      const badge = s._isItunes ? ' <span style="font-size:9px;background:#fc3c44;color:#fff;border-radius:3px;padding:1px 4px">30s</span>' : '';
       return `<div class="search-item" onclick="pickSearch(${i})"><div class="search-thumb">${thumb?`<img src="${thumb}" onerror="this.innerHTML='♪'">`:'♪'}</div><div class="search-info"><div class="search-name">${title}${badge}</div><div class="search-artist">${artist}</div></div></div>`;
     }).join('');
   } catch(e) { dd.innerHTML = '<div class="search-loading">Error searching</div>'; }
