@@ -2,7 +2,59 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') retuexport default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const { action, q, id } = req.query;
+  const YT_KEY = 'AIzaSyDHxAIUj9kphJcRumopPV4LITZhUoYgNhE';
+  const RENDER = 'https://aurawave-yt.onrender.com';
+
+  // ── SEARCH via YouTube Data API ──
+  if (action === 'search') {
+    if (!q) return res.status(400).json({ error: 'No query', results: [] });
+    try {
+      const r = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&maxResults=10&key=${YT_KEY}`,
+        { signal: AbortSignal.timeout(8000) }
+      );
+      const data = await r.json();
+      if (!data.items) return res.status(500).json({ error: 'No results', results: [] });
+      const junk = /karaoke|nightcore|instrumental|cover|sped up|lofi|reverb|slowed/i;
+      const results = data.items
+        .filter(v => !junk.test(v.snippet.title))
+        .slice(0, 10)
+        .map(v => ({
+          id: v.id.videoId,
+          title: v.snippet.title,
+          artist: v.snippet.channelTitle,
+          thumbnail: v.snippet.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${v.id.videoId}/mqdefault.jpg`,
+        }));
+      return res.status(200).json({ results });
+    } catch(e) {
+      return res.status(500).json({ error: e.message, results: [] });
+    }
+  }
+
+  // ── GET AUDIO via Render server (not blocked by YouTube) ──
+  if (action === 'audio') {
+    if (!id) return res.status(400).json({ error: 'No video ID' });
+    try {
+      const r = await fetch(`${RENDER}/audio?id=${id}`, {
+        signal: AbortSignal.timeout(15000)
+      });
+      const data = await r.json();
+      if (!data.audioUrl) throw new Error(data.error || 'No audio URL');
+      return res.status(200).json({ audioUrl: data.audioUrl });
+    } catch(e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  res.status(400).json({ error: 'Invalid action' });
+}rn res.status(200).end();
 
   const { action, q, id } = req.query;
   const YT_KEY = 'AIzaSyDHxAIUj9kphJcRumopPV4LITZhUoYgNhE';
