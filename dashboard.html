@@ -699,23 +699,29 @@ document.addEventListener('click',e=>{
 async function doSearch(q) {
   const dd = document.getElementById('searchDropdown');
   try {
-    // Try JioSaavn first (Indian songs — full audio)
-    const d = await saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=8&page=1`);
-    let songs = ((d.data && d.data.results) || []).slice(0, 8).map((s, i) => normalizeSaavn(s, i));
+    // Run JioSaavn + YouTube searches in parallel
+    const [saavnRes, ytRes] = await Promise.allSettled([
+      saavnFetch(`/search/songs?query=${encodeURIComponent(q)}&limit=5&page=1`),
+      fetch(`${YT_API}?action=search&q=${encodeURIComponent(q)}`).then(r=>r.json())
+    ]);
 
-    // If no results, fall back to YouTube via Invidious (English/any songs)
-    if (!songs.length) {
-      try {
-        const ytRes = await fetch(`${YT_API}?action=search&q=${encodeURIComponent(q)}`);
-        const ytData = await ytRes.json();
-        songs = (ytData.results || []).map((v, i) => ({
+    // JioSaavn results (Indian songs)
+    const saavnSongs = saavnRes.status === 'fulfilled'
+      ? ((saavnRes.value.data && saavnRes.value.data.results) || []).slice(0,5).map((s,i) => normalizeSaavn(s,i))
+      : [];
+
+    // YouTube results (English/all songs)
+    const ytSongs = ytRes.status === 'fulfilled'
+      ? (ytRes.value.results || []).slice(0,8).map(v => ({
           id: v.id, title: v.title, name: v.title,
           artist: v.artist, channelTitle: v.artist,
           thumbnail: v.thumbnail, image: v.thumbnail,
           previewUrl: '', _ytId: v.id, _isYt: true
-        }));
-      } catch {}
-    }
+        }))
+      : [];
+
+    // Merge: YouTube first (more relevant for English), then JioSaavn
+    const songs = [...ytSongs, ...saavnSongs];
 
     window._sr = songs;
     if (!songs.length) { dd.innerHTML = '<div class="search-loading">No results</div>'; return; }
