@@ -1,7 +1,4 @@
 {
   "name": "aurawave",
-  "version": "1.0.0",
-  "dependencies": {
-    "play-dl": "^1.9.7"
-  }
+  "version": "1.0.0"
 }
