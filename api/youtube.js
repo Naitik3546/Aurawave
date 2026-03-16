@@ -1,5 +1,3 @@
-import playdl from 'play-dl';
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -9,9 +7,9 @@ export default async function handler(req, res) {
   const { action, q, id } = req.query;
   const YT_KEY = 'AIzaSyDHxAIUj9kphJcRumopPV4LITZhUoYgNhE';
 
-  // ── SEARCH via YouTube Data API ──
+  // ── SEARCH ──
   if (action === 'search') {
-    if (!q) return res.status(400).json({ error: 'No query' });
+    if (!q) return res.status(400).json({ error: 'No query', results: [] });
     try {
       const r = await fetch(
         `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&maxResults=10&key=${YT_KEY}`,
@@ -35,22 +33,54 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── GET AUDIO URL via play-dl ──
+  // ── GET AUDIO via YouTube Innertube API ──
   if (action === 'audio') {
     if (!id) return res.status(400).json({ error: 'No video ID' });
     try {
-      const stream = await playdl.stream(`https://www.youtube.com/watch?v=${id}`, { quality: 2 });
-      const audioUrl = stream?.stream?.url || null;
-      if (!audioUrl) throw new Error('No URL found');
+      // Use YouTube's internal API (same as what the website uses)
+      const body = {
+        context: {
+          client: {
+            clientName: 'ANDROID',
+            clientVersion: '18.11.34',
+            androidSdkVersion: 30,
+            userAgent: 'com.google.android.youtube/18.11.34 (Linux; U; Android 11) gzip',
+            hl: 'en',
+            timeZone: 'UTC',
+            utcOffsetMinutes: 0
+          }
+        },
+        videoId: id,
+        params: 'CgIQBg=='
+      };
+
+      const r = await fetch('https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'com.google.android.youtube/18.11.34 (Linux; U; Android 11) gzip',
+          'X-YouTube-Client-Name': '3',
+          'X-YouTube-Client-Version': '18.11.34',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10000)
+      });
+
+      const data = await r.json();
+      const formats = data?.streamingData?.adaptiveFormats || data?.streamingData?.formats || [];
+      
+      // Get best audio-only format
+      const audioFormats = formats
+        .filter(f => f.mimeType?.includes('audio') && f.url)
+        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+
+      const audioUrl = audioFormats[0]?.url;
+      if (!audioUrl) {
+        return res.status(500).json({ error: 'No audio format found', status: data?.playabilityStatus?.status });
+      }
+
       return res.status(200).json({ audioUrl });
     } catch(e) {
-      // Fallback: try getting info directly
-      try {
-        const info = await playdl.video_info(`https://www.youtube.com/watch?v=${id}`);
-        const formats = info?.format || [];
-        const audio = formats.find(f => f.mimeType?.includes('audio'));
-        if (audio?.url) return res.status(200).json({ audioUrl: audio.url });
-      } catch {}
       return res.status(500).json({ error: e.message });
     }
   }
